@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { toast } from 'sonner'
+import { apiRequest } from '../lib/api.js'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const STORAGE_KEY = 'edutrack-auth'
 
 const readStoredAuth = () => {
@@ -39,19 +40,12 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: '' })
 
     try {
-      const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+      const payload = await apiRequest('/api/v1/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ email, password }),
+        successMessage: 'Signed in successfully.',
+        showSuccessToast: true,
       })
-
-      const payload = await response.json()
-
-      if (!response.ok) {
-        throw new Error(payload.detail ?? 'Unable to sign in.')
-      }
 
       persistAuth(payload.access_token, payload.user)
 
@@ -80,29 +74,21 @@ export const useAuthStore = create((set, get) => ({
       return null
     }
 
-    const response = await fetch(`${API_URL}/api/v1/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-
-    if (response.status === 401) {
+    try {
+      const user = await apiRequest('/api/v1/auth/me', {
+        showErrorToast: false,
+      })
+      persistAuth(token, user)
+      set({ user, isAuthenticated: true })
+      return user
+    } catch {
       get().logout()
       return null
     }
-
-    const user = await response.json()
-
-    if (!response.ok) {
-      throw new Error(user.detail ?? 'Unable to fetch session.')
-    }
-
-    persistAuth(token, user)
-    set({ user, isAuthenticated: true })
-    return user
   },
   logout() {
     persistAuth(null, null)
+    toast.success('Signed out.')
     set({
       token: null,
       user: null,

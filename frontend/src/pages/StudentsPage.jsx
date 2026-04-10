@@ -113,6 +113,8 @@ function StudentsPage() {
     try {
       const updatedStudent = await apiRequest(`/api/v1/students/${student.id}`, {
         method: 'DELETE',
+        successMessage: 'Student deactivated.',
+        showSuccessToast: true,
       })
 
       setStudents((current) =>

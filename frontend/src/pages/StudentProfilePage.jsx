@@ -25,6 +25,7 @@ function StudentProfilePage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const hasLowAttendance = attendance.some((entry) => entry.percentage < 75)
 
   useEffect(() => {
     let active = true
@@ -36,17 +37,17 @@ function StudentProfilePage() {
         const [studentPayload, coursesPayload, marksPayload, attendancePayload] =
           await Promise.all([
             apiRequest(`/api/v1/students/${studentId}`),
-            apiRequest(`/api/v1/students/${studentId}/profile/courses`),
-            apiRequest(`/api/v1/students/${studentId}/profile/marks`),
-            apiRequest(`/api/v1/students/${studentId}/profile/attendance`),
+            apiRequest(`/api/v1/enrollments/student/${studentId}`),
+            apiRequest(`/api/v1/marks/student/${studentId}`),
+            apiRequest(`/api/v1/attendance/student/${studentId}/summary`),
           ])
 
         if (active) {
           setStudent(studentPayload)
-          setCourses(coursesPayload.items)
+          setCourses(coursesPayload)
           setMarks(marksPayload.items)
           setMarksSummary(marksPayload.summary)
-          setAttendance(attendancePayload.items)
+          setAttendance(attendancePayload)
           setError('')
         }
       } catch (requestError) {
@@ -122,6 +123,9 @@ function StudentProfilePage() {
                   <span className={`status-badge status-${student.status}`}>
                     {student.status}
                   </span>
+                  {hasLowAttendance ? (
+                    <span className="status-badge status-inactive">Attendance alert</span>
+                  ) : null}
                 </div>
                 <h1>
                   {student.name.first} {student.name.last}

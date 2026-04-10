@@ -39,6 +39,31 @@ STUDENT_SCHEMA: dict[str, Any] = {
     "updated_at": "datetime",
 }
 
+COURSE_SCHEMA: dict[str, Any] = {
+    "_id": "ObjectId",
+    "course_code": "CS101",
+    "name": "string",
+    "description": "string",
+    "credits": "number",
+    "teacher_id": "ObjectId (ref: users)",
+    "schedule": {
+        "days": ["Monday", "Wednesday"],
+        "time": "10:00 AM",
+        "room": "A-201",
+    },
+    "capacity": "number",
+    "status": "active | archived",
+    "created_at": "datetime",
+}
+
+ENROLLMENT_SCHEMA: dict[str, Any] = {
+    "_id": "ObjectId",
+    "student_id": "ObjectId (ref: students)",
+    "course_id": "ObjectId (ref: courses)",
+    "enrolled_at": "datetime",
+    "status": "active | dropped | completed",
+}
+
 
 client: AsyncIOMotorClient | None = None
 database: AsyncIOMotorDatabase | None = None
@@ -83,7 +108,21 @@ def get_students_collection() -> AsyncIOMotorCollection:
     return get_database()["students"]
 
 
+def get_courses_collection() -> AsyncIOMotorCollection:
+    return get_database()["courses"]
+
+
+def get_enrollments_collection() -> AsyncIOMotorCollection:
+    return get_database()["enrollments"]
+
+
 async def _ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db["users"].create_index("email", unique=True)
     await db["students"].create_index("email", unique=True)
     await db["students"].create_index("student_id", unique=True)
+    await db["courses"].create_index("course_code", unique=True)
+    await db["enrollments"].create_index(
+        [("student_id", 1), ("course_id", 1)],
+        unique=True,
+        partialFilterExpression={"status": "active"},
+    )

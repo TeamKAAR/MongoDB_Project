@@ -323,26 +323,12 @@ async def ensure_demo_students() -> None:
 
 async def ensure_demo_academic_records() -> None:
     database = get_database()
-    courses = database["courses"]
-    enrollments = database["enrollments"]
     marks = database["marks"]
     attendance = database["attendance"]
+    courses = database["courses"]
+    enrollments = database["enrollments"]
 
-    if await courses.count_documents({}) == 0:
-        now = datetime.now(UTC)
-        await courses.insert_many(
-            [
-                {
-                    **course,
-                    "description": f"Demo course for {course['name']}.",
-                    "created_at": now,
-                    "updated_at": now,
-                }
-                for course in DEMO_COURSES
-            ]
-        )
-
-    if await enrollments.count_documents({}) > 0:
+    if await marks.count_documents({}) > 0 or await attendance.count_documents({}) > 0:
         return
 
     students = await (
@@ -355,32 +341,6 @@ async def ensure_demo_academic_records() -> None:
 
     if len(students) < 2 or len(course_documents) < 3:
         return
-
-    now = datetime.now(UTC)
-    enrollment_docs = [
-        {
-            "student_id": students[0]["_id"],
-            "course_id": course_documents[0]["_id"],
-            "status": "active",
-            "enrolled_at": datetime(2024, 7, 10, tzinfo=UTC),
-            "created_at": now,
-        },
-        {
-            "student_id": students[0]["_id"],
-            "course_id": course_documents[1]["_id"],
-            "status": "active",
-            "enrolled_at": datetime(2024, 7, 12, tzinfo=UTC),
-            "created_at": now,
-        },
-        {
-            "student_id": students[1]["_id"],
-            "course_id": course_documents[2]["_id"],
-            "status": "active",
-            "enrolled_at": datetime(2024, 7, 14, tzinfo=UTC),
-            "created_at": now,
-        },
-    ]
-    await enrollments.insert_many(enrollment_docs)
 
     mark_docs = [
         {

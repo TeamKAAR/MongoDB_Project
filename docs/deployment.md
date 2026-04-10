@@ -51,7 +51,7 @@ python scripts/seed_data.py
    ```
    Runtime: Python 3.11
    Build Command: pip install -r requirements.txt
-   Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+   Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
    ```
 5. **Environment Variables** (Add these):
    ```
@@ -97,7 +97,7 @@ python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env       # fill in MONGODB_URI
-uvicorn app.main:app --reload --port 8000
+uvicorn main:app --reload --port 8000
 # API docs: http://localhost:8000/docs
 ```
 

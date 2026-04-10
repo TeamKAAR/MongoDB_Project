@@ -156,6 +156,8 @@ function StudentFormModal({ isOpen, onClose, onSaved, student }) {
         {
           method: isEditMode ? 'PUT' : 'POST',
           body: JSON.stringify(payload),
+          successMessage: isEditMode ? 'Student updated.' : 'Student created.',
+          showSuccessToast: true,
         },
       )
 

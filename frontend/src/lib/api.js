@@ -1,3 +1,6 @@
+import { toast } from 'sonner'
+import { useUiStore } from '../store/uiStore.js'
+
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const STORAGE_KEY = 'edutrack-auth'
 
@@ -11,10 +14,20 @@ function getStoredToken() {
 }
 
 async function apiRequest(path, options = {}) {
+  const {
+    successMessage = '',
+    errorMessage = '',
+    showSuccessToast = false,
+    showErrorToast = true,
+    skipLoader = false,
+    ...fetchOptions
+  } = options
   const token = getStoredToken()
-  const headers = new Headers(options.headers ?? {})
+  const headers = new Headers(fetchOptions.headers ?? {})
+  const beginRequest = useUiStore.getState().beginRequest
+  const endRequest = useUiStore.getState().endRequest
 
-  if (!headers.has('Content-Type') && options.body) {
+  if (!headers.has('Content-Type') && fetchOptions.body) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -22,25 +35,43 @@ async function apiRequest(path, options = {}) {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  })
-
-  const contentType = response.headers.get('content-type') ?? ''
-  const payload = contentType.includes('application/json')
-    ? await response.json()
-    : await response.text()
-
-  if (!response.ok) {
-    const message =
-      typeof payload === 'object' && payload !== null
-        ? payload.detail ?? 'Request failed.'
-        : payload || 'Request failed.'
-    throw new Error(message)
+  if (!skipLoader) {
+    beginRequest()
   }
 
-  return payload
+  try {
+    const response = await fetch(`${API_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+    })
+
+    const contentType = response.headers.get('content-type') ?? ''
+    const payload = contentType.includes('application/json')
+      ? await response.json()
+      : await response.text()
+
+    if (!response.ok) {
+      const message =
+        errorMessage ||
+        (typeof payload === 'object' && payload !== null
+          ? payload.detail ?? 'Request failed.'
+          : payload || 'Request failed.')
+      if (showErrorToast) {
+        toast.error(message)
+      }
+      throw new Error(message)
+    }
+
+    if (showSuccessToast && successMessage) {
+      toast.success(successMessage)
+    }
+
+    return payload
+  } finally {
+    if (!skipLoader) {
+      endRequest()
+    }
+  }
 }
 
 export { API_URL, apiRequest }
