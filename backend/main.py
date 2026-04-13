@@ -17,7 +17,7 @@ from app.students.router import (
     ensure_demo_students,
     router as students_router,
 )
-from auth.router import ensure_demo_users, router as auth_router
+from auth.router import ensure_demo_user_links, ensure_demo_users, router as auth_router
 from database import close_mongodb_connection, connect_to_mongodb, get_database
 
 
@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
     await connect_to_mongodb()
     await ensure_demo_users()
     await ensure_demo_students()
+    await ensure_demo_user_links()
     await ensure_demo_courses()
     await ensure_demo_enrollments()
     await ensure_demo_academic_records()

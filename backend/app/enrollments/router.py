@@ -4,6 +4,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 
+from auth.permissions import ensure_course_access, ensure_student_access
 from auth.router import get_current_user
 from database import get_courses_collection, get_enrollments_collection, get_students_collection
 
@@ -124,7 +125,8 @@ async def create_enrollment(
     payload: EnrollmentCreate,
     current_user: dict = Depends(get_current_user),
 ) -> EnrollmentResponse:
-    del current_user
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can manage enrollments.")
     student_id = payload.student_id
     course_id = payload.course_id
     student_object_id = _object_id_or_404(student_id, "Student not found.")
@@ -166,7 +168,8 @@ async def delete_enrollment(
     course_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> EnrollmentResponse:
-    del current_user
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can manage enrollments.")
     student_object_id = _object_id_or_404(student_id, "Student not found.")
     course_object_id = _object_id_or_404(course_id, "Course not found.")
     enrollments = get_enrollments_collection()
@@ -189,10 +192,14 @@ async def list_student_enrollments(
     student_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> list[EnrollmentResponse]:
-    del current_user
     student_object_id = _object_id_or_404(student_id, "Student not found.")
+    await ensure_student_access(current_user, student_object_id)
+    match_stage: dict = {"student_id": student_object_id, "status": "active"}
+    if current_user["role"] == "teacher":
+        taught_courses = await get_courses_collection().distinct("_id", {"teacher_id": current_user["_id"]})
+        match_stage["course_id"] = {"$in": taught_courses}
     rows = await get_enrollments_collection().aggregate(
-        _enrollment_pipeline({"student_id": student_object_id, "status": "active"})
+        _enrollment_pipeline(match_stage)
     ).to_list(length=None)
     return [EnrollmentResponse(**row) for row in rows]
 
@@ -202,8 +209,8 @@ async def list_course_enrollments(
     course_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> list[EnrollmentResponse]:
-    del current_user
     course_object_id = _object_id_or_404(course_id, "Course not found.")
+    await ensure_course_access(current_user, course_object_id)
     rows = await get_enrollments_collection().aggregate(
         _enrollment_pipeline({"course_id": course_object_id, "status": "active"})
     ).to_list(length=None)

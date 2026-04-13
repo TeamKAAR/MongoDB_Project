@@ -9,7 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 
-from database import get_users_collection
+from database import get_students_collection, get_users_collection
 
 
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-backend-env")
@@ -52,6 +52,7 @@ class UserResponse(BaseModel):
     name: str
     email: EmailStr
     role: Literal["admin", "teacher", "student"]
+    student_profile_id: str | None = None
     is_active: bool
     created_at: datetime
 
@@ -87,6 +88,7 @@ def to_user_response(user: dict) -> UserResponse:
         name=user["name"],
         email=user["email"],
         role=user["role"],
+        student_profile_id=str(user["student_profile_id"]) if user.get("student_profile_id") else None,
         is_active=user["is_active"],
         created_at=user["created_at"],
     )
@@ -110,6 +112,22 @@ async def ensure_demo_users() -> None:
             },
             upsert=True,
         )
+
+
+async def ensure_demo_user_links() -> None:
+    student_user = await get_users_collection().find_one({"email": "student@edutrack.com"})
+    linked_student = await get_students_collection().find_one(
+        {"student_id": "STU-2026-0001"},
+        projection={"_id": 1},
+    )
+
+    if student_user is None or linked_student is None:
+        return
+
+    await get_users_collection().update_one(
+        {"_id": student_user["_id"]},
+        {"$set": {"student_profile_id": linked_student["_id"]}},
+    )
 
 
 async def get_current_user(

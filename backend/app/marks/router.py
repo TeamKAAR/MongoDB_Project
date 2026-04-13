@@ -4,8 +4,9 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
+from auth.permissions import ensure_course_access, ensure_student_access
 from auth.router import get_current_user
-from database import get_courses_collection, get_database, get_students_collection
+from database import get_courses_collection, get_database, get_enrollments_collection, get_students_collection
 
 
 router = APIRouter(prefix="/api/v1/marks", tags=["marks"])
@@ -129,7 +130,7 @@ def _marks_pipeline(match_stage: dict) -> list[dict]:
                 "percentage": 1,
                 "grade": 1,
                 "gpa": 1,
-                "date": "$recorded_at",
+                "date": {"$ifNull": ["$recorded_at", "$created_at"]},
                 "remarks": {"$ifNull": ["$remarks", ""]},
             }
         },
@@ -157,7 +158,6 @@ def _to_mark_document(payload: MarkCreate | MarkUpdate) -> dict:
 
 @router.post("", response_model=MarkResponse, status_code=status.HTTP_201_CREATED)
 async def create_mark(payload: MarkCreate, current_user: dict = Depends(get_current_user)) -> MarkResponse:
-    del current_user
     student_object_id = _object_id_or_404(payload.student_id, "Student not found.")
     course_object_id = _object_id_or_404(payload.course_id, "Course not found.")
 
@@ -165,6 +165,17 @@ async def create_mark(payload: MarkCreate, current_user: dict = Depends(get_curr
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found.")
     if await get_courses_collection().find_one({"_id": course_object_id}) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found.")
+    await ensure_course_access(current_user, course_object_id)
+    await ensure_student_access(current_user, student_object_id)
+    enrollment = await get_enrollments_collection().find_one(
+        {"student_id": student_object_id, "course_id": course_object_id, "status": "active"},
+        projection={"_id": 1},
+    )
+    if enrollment is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student is not actively enrolled in this course.",
+        )
 
     document = _to_mark_document(payload)
     result = await get_marks_collection().insert_one(document)
@@ -174,11 +185,12 @@ async def create_mark(payload: MarkCreate, current_user: dict = Depends(get_curr
 
 @router.put("/{mark_id}", response_model=MarkResponse)
 async def update_mark(mark_id: str, payload: MarkUpdate, current_user: dict = Depends(get_current_user)) -> MarkResponse:
-    del current_user
     mark_object_id = _object_id_or_404(mark_id, "Mark not found.")
     existing = await get_marks_collection().find_one({"_id": mark_object_id})
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mark not found.")
+    await ensure_course_access(current_user, existing["course_id"])
+    await ensure_student_access(current_user, existing["student_id"])
 
     await get_marks_collection().update_one({"_id": mark_object_id}, {"$set": _to_mark_document(payload)})
     row = await get_marks_collection().aggregate(_marks_pipeline({"_id": mark_object_id})).to_list(length=1)
@@ -187,9 +199,13 @@ async def update_mark(mark_id: str, payload: MarkUpdate, current_user: dict = De
 
 @router.get("/student/{student_id}", response_model=MarksStudentResponse)
 async def list_marks_for_student(student_id: str, current_user: dict = Depends(get_current_user)) -> MarksStudentResponse:
-    del current_user
     student_object_id = _object_id_or_404(student_id, "Student not found.")
-    rows = await get_marks_collection().aggregate(_marks_pipeline({"student_id": student_object_id})).to_list(length=None)
+    await ensure_student_access(current_user, student_object_id)
+    match_stage: dict = {"student_id": student_object_id}
+    if current_user["role"] == "teacher":
+        taught_courses = await get_courses_collection().distinct("_id", {"teacher_id": current_user["_id"]})
+        match_stage["course_id"] = {"$in": taught_courses}
+    rows = await get_marks_collection().aggregate(_marks_pipeline(match_stage)).to_list(length=None)
     if not rows:
         return MarksStudentResponse(items=[], summary=MarksStudentSummary())
 
@@ -203,7 +219,7 @@ async def list_marks_for_student(student_id: str, current_user: dict = Depends(g
 
 @router.get("/course/{course_id}", response_model=list[MarkResponse])
 async def list_marks_for_course(course_id: str, current_user: dict = Depends(get_current_user)) -> list[MarkResponse]:
-    del current_user
     course_object_id = _object_id_or_404(course_id, "Course not found.")
+    await ensure_course_access(current_user, course_object_id)
     rows = await get_marks_collection().aggregate(_marks_pipeline({"course_id": course_object_id})).to_list(length=None)
     return [MarkResponse(**row) for row in rows]

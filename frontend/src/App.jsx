@@ -10,10 +10,13 @@ import LoginPage from './pages/LoginPage.jsx'
 import MarksPage from './pages/MarksPage.jsx'
 import StudentProfilePage from './pages/StudentProfilePage.jsx'
 import StudentsPage from './pages/StudentsPage.jsx'
+import { getHomePath } from './lib/rbac.js'
 import { useAuthStore } from './store/authStore.js'
 
 function App() {
   const token = useAuthStore((state) => state.token)
+  const user = useAuthStore((state) => state.user)
+  const homePath = getHomePath(user)
 
   return (
     <>
@@ -21,22 +24,28 @@ function App() {
       <Routes>
         <Route
           path="/"
-          element={<Navigate to={token ? '/dashboard' : '/login'} replace />}
+          element={<Navigate to={token ? homePath : '/login'} replace />}
         />
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
-            <Route path="/attendance" element={<AttendancePage />} />
-            <Route path="/marks" element={<MarksPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/courses" element={<CoursesPage />} />
-            <Route path="/students" element={<StudentsPage />} />
-            <Route path="/students/:studentId" element={<StudentProfilePage />} />
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'teacher']} />}>
+              <Route path="/attendance" element={<AttendancePage />} />
+              <Route path="/marks" element={<MarksPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/courses" element={<CoursesPage />} />
+              <Route path="/students" element={<StudentsPage />} />
+            </Route>
+            <Route
+              element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student']} />}
+            >
+              <Route path="/students/:studentId" element={<StudentProfilePage />} />
+            </Route>
           </Route>
         </Route>
         <Route
           path="*"
-          element={<Navigate to={token ? '/dashboard' : '/login'} replace />}
+          element={<Navigate to={token ? homePath : '/login'} replace />}
         />
       </Routes>
     </>

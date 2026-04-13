@@ -88,7 +88,9 @@ export const useAuthStore = create((set, get) => ({
   },
   logout() {
     persistAuth(null, null)
-    toast.success('Signed out.')
+    if (get().token) {
+      toast.success('Signed out.')
+    }
     set({
       token: null,
       user: null,

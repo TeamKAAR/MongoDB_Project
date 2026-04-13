@@ -5,6 +5,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, field_validator
 
+from auth.permissions import ensure_course_access, ensure_student_access
 from auth.router import get_current_user
 from database import get_courses_collection, get_database, get_enrollments_collection, get_students_collection
 
@@ -111,11 +112,11 @@ async def bulk_mark_attendance(
     payload: AttendanceBulkRequest,
     current_user: dict = Depends(get_current_user),
 ) -> list[AttendanceRecord]:
-    del current_user
     course_object_id = _object_id_or_404(payload.course_id, "Course not found.")
 
     if await get_courses_collection().find_one({"_id": course_object_id}) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found.")
+    await ensure_course_access(current_user, course_object_id)
 
     active_enrollments = await get_enrollments_collection().find(
         {"course_id": course_object_id, "status": "active"},
@@ -161,8 +162,8 @@ async def list_attendance_for_course(
     date: datetime | None = Query(default=None),
     current_user: dict = Depends(get_current_user),
 ) -> list[AttendanceRecord]:
-    del current_user
     course_object_id = _object_id_or_404(course_id, "Course not found.")
+    await ensure_course_access(current_user, course_object_id)
     query: dict = {"course_id": course_object_id}
     if date is not None:
         query["date"] = date.astimezone(UTC)
@@ -172,9 +173,13 @@ async def list_attendance_for_course(
 
 @router.get("/student/{student_id}", response_model=list[AttendanceRecord])
 async def list_attendance_for_student(student_id: str, current_user: dict = Depends(get_current_user)) -> list[AttendanceRecord]:
-    del current_user
     student_object_id = _object_id_or_404(student_id, "Student not found.")
-    rows = await get_attendance_collection().aggregate(_attendance_pipeline({"student_id": student_object_id})).to_list(length=None)
+    await ensure_student_access(current_user, student_object_id)
+    match_stage: dict = {"student_id": student_object_id}
+    if current_user["role"] == "teacher":
+        taught_courses = await get_courses_collection().distinct("_id", {"teacher_id": current_user["_id"]})
+        match_stage["course_id"] = {"$in": taught_courses}
+    rows = await get_attendance_collection().aggregate(_attendance_pipeline(match_stage)).to_list(length=None)
     return [AttendanceRecord(**row) for row in rows]
 
 
@@ -183,10 +188,15 @@ async def attendance_summary_for_student(
     student_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> list[AttendanceSummaryItem]:
-    del current_user
     student_object_id = _object_id_or_404(student_id, "Student not found.")
+    await ensure_student_access(current_user, student_object_id)
     pipeline = [
         {"$match": {"student_id": student_object_id}},
+    ]
+    if current_user["role"] == "teacher":
+        taught_courses = await get_courses_collection().distinct("_id", {"teacher_id": current_user["_id"]})
+        pipeline.append({"$match": {"course_id": {"$in": taught_courses}}})
+    pipeline.extend([
         {
             "$group": {
                 "_id": "$course_id",
@@ -233,6 +243,6 @@ async def attendance_summary_for_student(
                 },
             }
         },
-    ]
+    ])
     rows = await get_attendance_collection().aggregate(pipeline).to_list(length=None)
     return [AttendanceSummaryItem(**row) for row in rows]

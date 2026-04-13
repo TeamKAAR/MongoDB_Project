@@ -1,16 +1,9 @@
 import { useEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { getHomePath } from '../lib/rbac.js'
 import { Button } from './ui/button.jsx'
 import { useAuthStore } from '../store/authStore.js'
 import { useUiStore } from '../store/uiStore.js'
-
-const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard' },
-  { to: '/students', label: 'Students' },
-  { to: '/courses', label: 'Courses' },
-  { to: '/marks', label: 'Marks' },
-  { to: '/attendance', label: 'Attendance' },
-]
 
 function AppLayout() {
   const navigate = useNavigate()
@@ -20,6 +13,18 @@ function AppLayout() {
   const mobileNavOpen = useUiStore((state) => state.mobileNavOpen)
   const toggleMobileNav = useUiStore((state) => state.toggleMobileNav)
   const closeMobileNav = useUiStore((state) => state.closeMobileNav)
+  const navItems =
+    user?.role === 'student'
+      ? [
+          { to: getHomePath(user), label: 'My Profile' },
+        ]
+      : [
+          { to: '/dashboard', label: 'Dashboard' },
+          { to: '/students', label: 'Students' },
+          { to: '/courses', label: 'Courses' },
+          { to: '/marks', label: 'Marks' },
+          { to: '/attendance', label: 'Attendance' },
+        ]
 
   useEffect(() => {
     closeMobileNav()
@@ -42,7 +47,7 @@ function AppLayout() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

@@ -5,6 +5,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
+from auth.permissions import build_course_scope_query, ensure_course_access, require_roles
 from auth.router import DEMO_USERS, get_current_user
 from database import get_courses_collection, get_enrollments_collection, get_users_collection
 
@@ -171,16 +172,16 @@ async def ensure_demo_courses() -> None:
 
 
 @router.get("", response_model=list[CourseResponse])
-async def list_courses(current_user: dict = Depends(get_current_user)) -> list[CourseResponse]:
-    del current_user
-    courses = await get_courses_collection().find({}).sort("course_code", 1).to_list(length=None)
+async def list_courses(current_user: dict = Depends(require_roles("admin", "teacher"))) -> list[CourseResponse]:
+    query = await build_course_scope_query(current_user)
+    courses = await get_courses_collection().find(query).sort("course_code", 1).to_list(length=None)
     return [await _serialize_course(course) for course in courses]
 
 
 @router.post("", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
 async def create_course(
     payload: CourseCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin")),
 ) -> CourseResponse:
     del current_user
     courses = get_courses_collection()
@@ -199,9 +200,9 @@ async def create_course(
 
 
 @router.get("/{course_id}", response_model=CourseResponse)
-async def get_course(course_id: str, current_user: dict = Depends(get_current_user)) -> CourseResponse:
-    del current_user
+async def get_course(course_id: str, current_user: dict = Depends(require_roles("admin", "teacher"))) -> CourseResponse:
     object_id = _course_object_id_or_404(course_id)
+    await ensure_course_access(current_user, object_id)
     course = await get_courses_collection().find_one({"_id": object_id})
     if course is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found.")
@@ -212,7 +213,7 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
 async def update_course(
     course_id: str,
     payload: CourseUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin")),
 ) -> CourseResponse:
     del current_user
     object_id = _course_object_id_or_404(course_id)
@@ -237,7 +238,7 @@ async def update_course(
 @router.delete("/{course_id}", response_model=CourseResponse)
 async def archive_course(
     course_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin")),
 ) -> CourseResponse:
     del current_user
     object_id = _course_object_id_or_404(course_id)

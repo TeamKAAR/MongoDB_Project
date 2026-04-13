@@ -30,6 +30,17 @@ const EMPTY_FORM = {
   remarks: '',
 }
 
+function normalizeMarksStudentPayload(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { items: [], summary: null }
+  }
+
+  return {
+    items: Array.isArray(payload.items) ? payload.items : [],
+    summary: payload.summary && typeof payload.summary === 'object' ? payload.summary : null,
+  }
+}
+
 function MarksPage() {
   const [courses, setCourses] = useState([])
   const [students, setStudents] = useState([])
@@ -39,6 +50,8 @@ function MarksPage() {
   const [studentSummary, setStudentSummary] = useState(null)
   const [formValues, setFormValues] = useState(EMPTY_FORM)
   const [error, setError] = useState('')
+  const [courseMarksError, setCourseMarksError] = useState('')
+  const [studentMarksError, setStudentMarksError] = useState('')
   const [notice, setNotice] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -54,13 +67,19 @@ function MarksPage() {
         ])
 
         if (active) {
-          setCourses(coursesPayload.filter((course) => course.status === 'active'))
-          setStudents(studentsPayload.items)
-          setSelectedCourseId(coursesPayload[0]?.id ?? '')
+          const activeCourses = Array.isArray(coursesPayload)
+            ? coursesPayload.filter((course) => course.status === 'active')
+            : []
+          const visibleStudents = Array.isArray(studentsPayload?.items)
+            ? studentsPayload.items
+            : []
+          setCourses(activeCourses)
+          setStudents(visibleStudents)
+          setSelectedCourseId(activeCourses[0]?.id ?? '')
           setFormValues((current) => ({
             ...current,
-            course_id: coursesPayload[0]?.id ?? '',
-            student_id: studentsPayload.items[0]?.id ?? '',
+            course_id: activeCourses[0]?.id ?? '',
+            student_id: visibleStudents[0]?.id ?? '',
           }))
         }
       } catch (requestError) {
@@ -83,29 +102,42 @@ function MarksPage() {
 
   useEffect(() => {
     if (!selectedCourseId) {
+      setCourseMarks([])
+      setCourseMarksError('')
       return
     }
 
     apiRequest(`/api/v1/marks/course/${selectedCourseId}`)
       .then((payload) => {
-        setCourseMarks(payload)
-        setError('')
+        setCourseMarks(Array.isArray(payload) ? payload : [])
+        setCourseMarksError('')
       })
-      .catch((requestError) => setError(requestError.message))
+      .catch((requestError) => {
+        setCourseMarks([])
+        setCourseMarksError(requestError.message)
+      })
   }, [selectedCourseId])
 
   useEffect(() => {
     if (!formValues.student_id) {
+      setStudentMarks([])
+      setStudentSummary(null)
+      setStudentMarksError('')
       return
     }
 
     apiRequest(`/api/v1/marks/student/${formValues.student_id}`)
       .then((payload) => {
-        setStudentMarks(payload.items)
-        setStudentSummary(payload.summary)
-        setError('')
+        const normalized = normalizeMarksStudentPayload(payload)
+        setStudentMarks(normalized.items)
+        setStudentSummary(normalized.summary)
+        setStudentMarksError('')
       })
-      .catch((requestError) => setError(requestError.message))
+      .catch((requestError) => {
+        setStudentMarks([])
+        setStudentSummary(null)
+        setStudentMarksError(requestError.message)
+      })
   }, [formValues.student_id])
 
   const preview = useMemo(() => {
@@ -186,6 +218,13 @@ function MarksPage() {
             {isLoading ? (
               <div className="empty-state">
                 <p>Loading form data...</p>
+              </div>
+            ) : courses.length === 0 || students.length === 0 ? (
+              <div className="empty-state">
+                <p>
+                  Marks entry is unavailable because there are no visible courses or
+                  students for your account yet.
+                </p>
               </div>
             ) : (
               <form className="student-form" onSubmit={handleSubmit}>
@@ -331,6 +370,7 @@ function MarksPage() {
             <CardDescription>Review recorded marks for the selected course.</CardDescription>
           </CardHeader>
           <CardContent>
+            {courseMarksError ? <p className="error-box">{courseMarksError}</p> : null}
             <div className="field-group">
               <Label htmlFor="course_filter">Course selector</Label>
               <select
@@ -347,7 +387,11 @@ function MarksPage() {
               </select>
             </div>
 
-            {courseMarks.length === 0 ? (
+            {!selectedCourseId ? (
+              <div className="empty-state">
+                <p>No course is available for marks review.</p>
+              </div>
+            ) : courseMarks.length === 0 ? (
               <div className="empty-state">
                 <p>No marks recorded for this course yet.</p>
               </div>
@@ -393,7 +437,8 @@ function MarksPage() {
           <CardDescription>Quick summary for the currently selected student.</CardDescription>
         </CardHeader>
         <CardContent>
-          {studentSummary?.overall_gpa !== null ? (
+          {studentMarksError ? <p className="error-box">{studentMarksError}</p> : null}
+          {studentSummary && studentSummary.overall_gpa != null ? (
             <div className="summary-strip">
               <div className="summary-card">
                 <p className="section-label">Overall GPA</p>

@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.jsx'
 import { Input } from '../components/ui/input.jsx'
 import { Label } from '../components/ui/label.jsx'
+import { getHomePath } from '../lib/rbac.js'
 import { useAuthStore } from '../store/authStore.js'
 
 const DEMO_USERS = [
@@ -34,8 +35,12 @@ function LoginPage() {
     event.preventDefault()
 
     try {
-      await login(email, password)
-      navigate(redirectTo, { replace: true })
+      const user = await login(email, password)
+      const safeRedirect =
+        user.role === 'student' && redirectTo === '/dashboard'
+          ? getHomePath(user)
+          : redirectTo
+      navigate(safeRedirect, { replace: true })
     } catch {
       return
     }

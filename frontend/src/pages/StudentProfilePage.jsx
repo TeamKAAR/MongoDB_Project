@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.jsx'
 import { apiRequest } from '../lib/api.js'
 import { avatarColor, formatDate, initials } from '../lib/utils.js'
+import { useAuthStore } from '../store/authStore.js'
 
 const TABS = [
   { id: 'courses', label: 'Courses' },
@@ -14,6 +15,8 @@ const TABS = [
 ]
 
 function StudentProfilePage() {
+  const user = useAuthStore((state) => state.user)
+  const canEditStudent = user?.role === 'admin'
   const { studentId } = useParams()
   const [student, setStudent] = useState(null)
   const [courses, setCourses] = useState([])
@@ -134,9 +137,11 @@ function StudentProfilePage() {
               </div>
             </div>
 
-            <Button type="button" onClick={() => setIsModalOpen(true)}>
-              Edit student
-            </Button>
+            {canEditStudent ? (
+              <Button type="button" onClick={() => setIsModalOpen(true)}>
+                Edit student
+              </Button>
+            ) : null}
           </div>
 
           <div className="profile-grid">
@@ -313,7 +318,7 @@ function StudentProfilePage() {
       </Card>
 
       <StudentFormModal
-        isOpen={isModalOpen}
+        isOpen={canEditStudent && isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSaved={handleSaved}
         student={student}

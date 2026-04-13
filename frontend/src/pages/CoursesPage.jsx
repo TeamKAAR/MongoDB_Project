@@ -3,6 +3,7 @@ import EnrollmentModal from '../components/courses/EnrollmentModal.jsx'
 import { Button } from '../components/ui/button.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.jsx'
 import { apiRequest } from '../lib/api.js'
+import { useAuthStore } from '../store/authStore.js'
 
 function capacityPercent(enrolled, capacity) {
   if (!capacity) {
@@ -13,6 +14,8 @@ function capacityPercent(enrolled, capacity) {
 }
 
 function CoursesPage() {
+  const user = useAuthStore((state) => state.user)
+  const canManageEnrollments = user?.role === 'admin'
   const [courses, setCourses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -99,9 +102,11 @@ function CoursesPage() {
                   </div>
 
                   <div className="course-actions">
-                    <Button type="button" onClick={() => setSelectedCourse(course)}>
-                      Enroll
-                    </Button>
+                    {canManageEnrollments ? (
+                      <Button type="button" onClick={() => setSelectedCourse(course)}>
+                        Enroll
+                      </Button>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -112,7 +117,7 @@ function CoursesPage() {
 
       <EnrollmentModal
         course={selectedCourse}
-        isOpen={Boolean(selectedCourse)}
+        isOpen={canManageEnrollments && Boolean(selectedCourse)}
         onClose={() => setSelectedCourse(null)}
         onEnrollmentChanged={loadCourses}
       />

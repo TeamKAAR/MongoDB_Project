@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from auth.router import get_current_user
+from auth.permissions import require_roles
 from database import get_database
 
 
@@ -57,7 +57,7 @@ def _month_start(reference: datetime, months_back: int) -> datetime:
 
 @router.get("/analytics", response_model=DashboardAnalyticsResponse)
 async def dashboard_analytics(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin", "teacher")),
 ) -> DashboardAnalyticsResponse:
     del current_user
     database = get_database()

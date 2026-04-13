@@ -7,10 +7,13 @@ import { Input } from '../components/ui/input.jsx'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.jsx'
 import { apiRequest } from '../lib/api.js'
 import { avatarColor, formatDate, initials } from '../lib/utils.js'
+import { useAuthStore } from '../store/authStore.js'
 
 const PAGE_SIZE = 20
 
 function StudentsPage() {
+  const user = useAuthStore((state) => state.user)
+  const canManageStudents = user?.role === 'admin'
   const [students, setStudents] = useState([])
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState({ total: 0, pages: 1 })
@@ -149,9 +152,11 @@ function StudentsPage() {
               Showing live data from the protected students API.
             </CardDescription>
           </div>
-          <Button type="button" onClick={openCreateModal}>
-            Add student
-          </Button>
+          {canManageStudents ? (
+            <Button type="button" onClick={openCreateModal}>
+              Add student
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent>
           <div className="toolbar">
@@ -231,20 +236,24 @@ function StudentsPage() {
                             <Link className="text-button" to={`/students/${student.id}`}>
                               View
                             </Link>
-                            <button
-                              type="button"
-                              className="text-button"
-                              onClick={() => openEditModal(student)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="text-button text-danger"
-                              onClick={() => handleDelete(student)}
-                            >
-                              Delete
-                            </button>
+                            {canManageStudents ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="text-button"
+                                  onClick={() => openEditModal(student)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-button text-danger"
+                                  onClick={() => handleDelete(student)}
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            ) : null}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -287,7 +296,7 @@ function StudentsPage() {
       </Card>
 
       <StudentFormModal
-        isOpen={isModalOpen}
+        isOpen={canManageStudents && isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSaved={handleSaved}
         student={selectedStudent}

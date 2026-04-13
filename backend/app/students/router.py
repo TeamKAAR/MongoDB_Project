@@ -6,6 +6,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from auth.permissions import build_student_scope_query, ensure_student_access, require_roles
 from auth.router import get_current_user
 from database import get_database, get_students_collection
 
@@ -441,10 +442,8 @@ async def list_students(
     limit: int = Query(default=20, ge=1, le=100),
     search: str = Query(default=""),
     status_filter: str = Query(default="", alias="status"),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin", "teacher")),
 ) -> StudentListResponse:
-    del current_user
-
     query: dict = {}
     if status_filter and status_filter != "all":
         query["status"] = status_filter
@@ -452,6 +451,7 @@ async def list_students(
     search_query = _search_query(search)
     if search_query:
         query.update(search_query)
+    query = await build_student_scope_query(current_user, query)
 
     students = get_students_collection()
     total = await students.count_documents(query)
@@ -475,7 +475,7 @@ async def list_students(
 @router.post("", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
 async def create_student(
     payload: StudentCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin")),
 ) -> StudentResponse:
     del current_user
 
@@ -504,9 +504,8 @@ async def get_student(
     student_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> StudentResponse:
-    del current_user
-
     object_id = _get_student_or_404(student_id)
+    await ensure_student_access(current_user, object_id)
     student = await get_students_collection().find_one({"_id": object_id}, projection=_student_projection())
     if student is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found.")
@@ -518,7 +517,7 @@ async def get_student(
 async def update_student(
     student_id: str,
     payload: StudentUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin")),
 ) -> StudentResponse:
     del current_user
 
@@ -549,7 +548,7 @@ async def update_student(
 @router.delete("/{student_id}", response_model=StudentResponse)
 async def delete_student(
     student_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin")),
 ) -> StudentResponse:
     del current_user
 
@@ -578,11 +577,15 @@ async def get_student_courses(
     student_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    del current_user
     object_id = _get_student_or_404(student_id)
+    await ensure_student_access(current_user, object_id)
+    match_stage: dict = {"student_id": object_id, "status": "active"}
+    if current_user["role"] == "teacher":
+        taught_courses = await get_database()["courses"].distinct("_id", {"teacher_id": current_user["_id"]})
+        match_stage["course_id"] = {"$in": taught_courses}
 
     pipeline = [
-        {"$match": {"student_id": object_id, "status": "active"}},
+        {"$match": match_stage},
         {
             "$lookup": {
                 "from": "courses",
@@ -612,11 +615,15 @@ async def get_student_marks(
     student_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    del current_user
     object_id = _get_student_or_404(student_id)
+    await ensure_student_access(current_user, object_id)
+    match_stage: dict = {"student_id": object_id}
+    if current_user["role"] == "teacher":
+        taught_courses = await get_database()["courses"].distinct("_id", {"teacher_id": current_user["_id"]})
+        match_stage["course_id"] = {"$in": taught_courses}
 
     pipeline = [
-        {"$match": {"student_id": object_id}},
+        {"$match": match_stage},
         {
             "$lookup": {
                 "from": "courses",
@@ -656,11 +663,15 @@ async def get_student_attendance(
     student_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    del current_user
     object_id = _get_student_or_404(student_id)
+    await ensure_student_access(current_user, object_id)
+    match_stage: dict = {"student_id": object_id}
+    if current_user["role"] == "teacher":
+        taught_courses = await get_database()["courses"].distinct("_id", {"teacher_id": current_user["_id"]})
+        match_stage["course_id"] = {"$in": taught_courses}
 
     pipeline = [
-        {"$match": {"student_id": object_id}},
+        {"$match": match_stage},
         {
             "$group": {
                 "_id": "$course_id",
