@@ -26,6 +26,7 @@
    ```
 7. Save this — it's your `MONGODB_URI`
 
+
 ---
 
 ## Step 2: Seed the Database
