@@ -102,7 +102,7 @@ DEMO_STUDENTS: list[dict] = [
     {
         "student_id": "STU-2026-0001",
         "name": {"first": "Aarav", "last": "Sharma"},
-        "email": "aarav.sharma@edutrack.com",
+        "email": "student@edutrack.com",
         "phone": "9876543210",
         "date_of_birth": datetime(2005, 2, 14, tzinfo=UTC),
         "gender": "Male",

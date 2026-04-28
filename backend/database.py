@@ -116,6 +116,14 @@ def get_enrollments_collection() -> AsyncIOMotorCollection:
     return get_database()["enrollments"]
 
 
+def get_mentorships_collection() -> AsyncIOMotorCollection:
+    return get_database()["mentorships"]
+
+
+def get_interactions_collection() -> AsyncIOMotorCollection:
+    return get_database()["interactions"]
+
+
 async def _ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db["users"].create_index("email", unique=True)
     await db["students"].create_index("email", unique=True)
@@ -126,3 +134,13 @@ async def _ensure_indexes(db: AsyncIOMotorDatabase) -> None:
         unique=True,
         partialFilterExpression={"status": "active"},
     )
+    # Sprint 6: ensure a student can only have one active mentor at a time
+    await db["mentorships"].create_index(
+        [("student_id", 1)],
+        unique=True,
+        partialFilterExpression={"status": "active"},
+    )
+    await db["mentorships"].create_index("teacher_id")
+    # Sprint 7: interactions lookup by mentorship
+    await db["interactions"].create_index("mentorship_id")
+    await db["interactions"].create_index("next_meeting_date")

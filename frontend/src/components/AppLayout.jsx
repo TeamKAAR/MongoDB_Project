@@ -24,6 +24,7 @@ function AppLayout() {
           { to: '/courses', label: 'Courses' },
           { to: '/marks', label: 'Marks' },
           { to: '/attendance', label: 'Attendance' },
+          ...(user?.role === 'teacher' ? [{ to: '/mentees', label: 'My Mentees' }] : []),
         ]
 
   useEffect(() => {

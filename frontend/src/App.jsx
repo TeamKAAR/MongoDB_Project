@@ -8,6 +8,7 @@ import CoursesPage from './pages/CoursesPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import MarksPage from './pages/MarksPage.jsx'
+import MyMenteesPage from './pages/MyMenteesPage.jsx'
 import StudentProfilePage from './pages/StudentProfilePage.jsx'
 import StudentsPage from './pages/StudentsPage.jsx'
 import { getHomePath } from './lib/rbac.js'
@@ -35,6 +36,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/courses" element={<CoursesPage />} />
               <Route path="/students" element={<StudentsPage />} />
+              <Route path="/mentees" element={<MyMenteesPage />} />
             </Route>
             <Route
               element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student']} />}

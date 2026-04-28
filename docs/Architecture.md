@@ -215,6 +215,32 @@ edutrack/
 }
 ```
 
+### Collection: `mentorship`
+```json
+{
+  "_id": "ObjectId",
+  "teacher_id": "ObjectId (ref: users, role: teacher)",
+  "student_id": "ObjectId (ref: students)",
+  "assigned_date": "datetime",
+  "status": "active | transferred | graduated"
+}
+```
+
+### Collection: `interactions`
+```json
+{
+  "_id": "ObjectId",
+  "mentorship_id": "ObjectId (ref: mentorships)",
+  "meeting_date": "datetime",
+  "type": "1-on-1 | academic_review | behavioral | check_in",
+  "remarks": "string",
+  "action_items": ["string"],
+  "next_meeting_date": "datetime (optional)",
+  "logged_by": "ObjectId (ref: users)",
+  "created_at": "datetime"
+}
+```
+
 ---
 
 ## 4. Key MongoDB Queries

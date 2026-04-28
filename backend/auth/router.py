@@ -30,7 +30,7 @@ DEMO_USERS = [
         "role": "teacher",
     },
     {
-        "name": "Demo Student",
+        "name": "Aarav Sharma",
         "email": "student@edutrack.com",
         "password": "Student@123",
         "role": "student",

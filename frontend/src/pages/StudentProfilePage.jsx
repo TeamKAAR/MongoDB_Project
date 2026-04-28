@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import StudentFormModal from '../components/students/StudentFormModal.jsx'
+import InteractionFormModal from '../components/mentorship/InteractionFormModal.jsx'
 import { Button } from '../components/ui/button.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.jsx'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.jsx'
+import { Label } from '../components/ui/label.jsx'
 import { apiRequest } from '../lib/api.js'
 import { avatarColor, formatDate, initials } from '../lib/utils.js'
 import { useAuthStore } from '../store/authStore.js'
@@ -12,11 +14,20 @@ const TABS = [
   { id: 'courses', label: 'Courses' },
   { id: 'marks', label: 'Marks' },
   { id: 'attendance', label: 'Attendance' },
+  { id: 'mentorship', label: 'Mentorship' },
 ]
+
+const MEETING_TYPE_LABELS = {
+  '1-on-1': '1-on-1 Meeting',
+  academic_review: 'Academic Review',
+  behavioral: 'Behavioral',
+  check_in: 'Check-in',
+}
 
 function StudentProfilePage() {
   const user = useAuthStore((state) => state.user)
   const canEditStudent = user?.role === 'admin'
+  const canAssignMentor = user?.role === 'admin' || user?.role === 'teacher'
   const { studentId } = useParams()
   const [student, setStudent] = useState(null)
   const [courses, setCourses] = useState([])
@@ -29,6 +40,18 @@ function StudentProfilePage() {
   const [notice, setNotice] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const hasLowAttendance = attendance.some((entry) => entry.percentage < 75)
+
+  // Mentorship state (Sprint 6 + 7)
+  const [mentorship, setMentorship] = useState(null)
+  const [interactions, setInteractions] = useState([])
+  const [isInteractionModalOpen, setIsInteractionModalOpen] = useState(false)
+
+  // Mentor-assignment state (Sprint 6) — now for admin AND teacher
+  const [teachers, setTeachers] = useState([])
+  const [selectedTeacherId, setSelectedTeacherId] = useState('')
+  const [isAssigning, setIsAssigning] = useState(false)
+  const [assignNotice, setAssignNotice] = useState('')
+  const [showReassign, setShowReassign] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -53,6 +76,41 @@ function StudentProfilePage() {
           setAttendance(attendancePayload)
           setError('')
         }
+
+        // Load mentorship data for admin, teacher, AND student
+        try {
+          const mentorshipData = await apiRequest(
+            `/api/v1/mentorships/student/${studentId}`,
+            { showErrorToast: false },
+          )
+          if (active) {
+            setMentorship(mentorshipData)
+            // Load interactions if any mentorship exists (current or past)
+            try {
+              const interactionsData = await apiRequest(
+                `/api/v1/interactions/student/${studentId}`,
+                { showErrorToast: false },
+              )
+              if (active) setInteractions(interactionsData?.items ?? [])
+            } catch {
+              // Non-critical
+            }
+          }
+        } catch {
+          // Mentorship might not exist, that's OK
+        }
+
+        // Load teachers list for mentor assignment (admin + teacher)
+        if (canAssignMentor) {
+          try {
+            const teachersList = await apiRequest('/api/v1/mentorships/teachers', {
+              showErrorToast: false,
+            })
+            if (active) setTeachers(teachersList)
+          } catch {
+            // Non-critical
+          }
+        }
       } catch (requestError) {
         if (active) {
           setError(requestError.message)
@@ -69,11 +127,37 @@ function StudentProfilePage() {
     return () => {
       active = false
     }
-  }, [studentId])
+  }, [studentId, user])
 
   const handleSaved = (savedStudent, message) => {
     setStudent(savedStudent)
     setNotice(message)
+  }
+
+  const handleAssignMentor = async () => {
+    if (!selectedTeacherId) return
+    setIsAssigning(true)
+    setAssignNotice('')
+    try {
+      const result = await apiRequest('/api/v1/mentorships', {
+        method: 'POST',
+        body: JSON.stringify({ teacher_id: selectedTeacherId, student_id: studentId }),
+        successMessage: mentorship ? 'Mentor reassigned successfully.' : 'Mentor assigned successfully.',
+        showSuccessToast: true,
+      })
+      setMentorship(result)
+      setAssignNotice(mentorship ? 'Mentor reassigned successfully.' : 'Mentor assigned successfully.')
+      setShowReassign(false)
+      setSelectedTeacherId('')
+    } catch (err) {
+      setAssignNotice(err.message)
+    } finally {
+      setIsAssigning(false)
+    }
+  }
+
+  const handleInteractionSaved = (saved) => {
+    setInteractions((prev) => [saved, ...prev])
   }
 
   if (isLoading) {
@@ -100,6 +184,10 @@ function StudentProfilePage() {
       </main>
     )
   }
+
+  const canLogInteraction =
+    mentorship?.id &&
+    (user?.role === 'admin' || (user?.role === 'teacher' && mentorship?.teacher_id === user?.id))
 
   return (
     <main className="app-shell">
@@ -173,14 +261,105 @@ function StudentProfilePage() {
               </p>
             </div>
           </div>
+
+          {/* Mentor info badge */}
+          {mentorship ? (
+            <div className="mentor-badge-strip">
+              <p className="section-label">Current Mentor</p>
+              <div className="badge-row">
+                <span className="profile-pill">{mentorship.teacher_name ?? 'Assigned'}</span>
+                <span className={`status-badge status-${mentorship.status}`}>
+                  {mentorship.status}
+                </span>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
+
+      {/* Mentor assignment section — visible for admin AND teacher */}
+      {canAssignMentor ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Mentor Assignment</CardTitle>
+            <CardDescription>
+              {mentorship
+                ? `Currently mentored by ${mentorship.teacher_name ?? 'a teacher'}.`
+                : 'Assign a mentor teacher to this student.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {assignNotice ? <p className="success-box">{assignNotice}</p> : null}
+            {mentorship && !showReassign ? (
+              <div className="mentor-assignment-current">
+                <div className="dashboard-list-item">
+                  <div>
+                    <strong>{mentorship.teacher_name ?? 'Teacher'}</strong>
+                    <p>Assigned {formatDate(mentorship.assigned_date)}</p>
+                  </div>
+                  <div className="table-actions">
+                    <span className={`status-badge status-${mentorship.status}`}>
+                      {mentorship.status}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setShowReassign(true)}
+                    >
+                      Change mentor
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="form-grid form-grid-2">
+                <div className="field-group">
+                  <Label htmlFor="mentor_select">Select teacher</Label>
+                  <select
+                    id="mentor_select"
+                    className="ui-select"
+                    value={selectedTeacherId}
+                    onChange={(e) => setSelectedTeacherId(e.target.value)}
+                  >
+                    <option value="">— Choose a teacher —</option>
+                    {teachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field-group" style={{ alignSelf: 'end' }}>
+                  <div className="table-actions">
+                    <Button
+                      type="button"
+                      disabled={!selectedTeacherId || isAssigning}
+                      onClick={handleAssignMentor}
+                    >
+                      {isAssigning ? 'Assigning...' : mentorship ? 'Reassign mentor' : 'Assign mentor'}
+                    </Button>
+                    {showReassign ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => { setShowReassign(false); setSelectedTeacherId('') }}
+                      >
+                        Cancel
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle>Academic tabs</CardTitle>
           <CardDescription>
-            The profile is ready for the course, marks, and attendance modules.
+            The profile is ready for the course, marks, attendance, and mentorship modules.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -314,6 +493,74 @@ function StudentProfilePage() {
               </div>
             )
           ) : null}
+
+          {/* Sprint 7: Mentorship tab — visible to all roles */}
+          {activeTab === 'mentorship' ? (
+            <div>
+              {/* Log interaction button (only for admin/teacher) */}
+              {canLogInteraction ? (
+                <div style={{ marginBottom: '18px' }}>
+                  <Button
+                    type="button"
+                    onClick={() => setIsInteractionModalOpen(true)}
+                  >
+                    Log new interaction
+                  </Button>
+                </div>
+              ) : null}
+
+              {!mentorship && interactions.length === 0 ? (
+                <div className="empty-state">
+                  <p>No mentorship history for this student.</p>
+                </div>
+              ) : interactions.length === 0 ? (
+                <div className="empty-state">
+                  <p>No interactions logged yet.{canLogInteraction ? ' Use the button above to log the first meeting.' : ''}</p>
+                </div>
+              ) : (
+                <div className="timeline">
+                  {interactions.map((interaction) => (
+                    <article key={interaction.id} className="timeline-item">
+                      <div className="timeline-dot" />
+                      <div className="timeline-content">
+                        <div className="timeline-header">
+                          <div className="badge-row">
+                            <span className="profile-pill">
+                              {MEETING_TYPE_LABELS[interaction.type] ?? interaction.type}
+                            </span>
+                            <time className="timeline-date">
+                              {formatDate(interaction.meeting_date)}
+                            </time>
+                          </div>
+                          {interaction.logged_by_name ? (
+                            <p className="mentee-card-meta">
+                              Logged by {interaction.logged_by_name}
+                            </p>
+                          ) : null}
+                        </div>
+                        <p className="timeline-remarks">{interaction.remarks}</p>
+                        {interaction.action_items?.length > 0 ? (
+                          <div className="timeline-actions">
+                            <p className="section-label">Action items</p>
+                            <ul>
+                              {interaction.action_items.map((item, idx) => (
+                                <li key={idx}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {interaction.next_meeting_date ? (
+                          <p className="timeline-next">
+                            Next meeting: {formatDate(interaction.next_meeting_date)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -322,6 +569,13 @@ function StudentProfilePage() {
         onClose={() => setIsModalOpen(false)}
         onSaved={handleSaved}
         student={student}
+      />
+
+      <InteractionFormModal
+        isOpen={isInteractionModalOpen}
+        onClose={() => setIsInteractionModalOpen(false)}
+        onSaved={handleInteractionSaved}
+        mentorshipId={mentorship?.id}
       />
     </main>
   )

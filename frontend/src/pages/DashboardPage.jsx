@@ -12,7 +12,15 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.jsx'
 import { apiRequest } from '../lib/api.js'
+import { formatDate } from '../lib/utils.js'
 import { useAuthStore } from '../store/authStore.js'
+
+const MEETING_TYPE_LABELS = {
+  '1-on-1': '1-on-1',
+  academic_review: 'Academic Review',
+  behavioral: 'Behavioral',
+  check_in: 'Check-in',
+}
 
 function statValue(stat) {
   if (stat.label === 'Total Students' || stat.label === 'Courses') {
@@ -24,10 +32,10 @@ function statValue(stat) {
 
 function DashboardPage() {
   const user = useAuthStore((state) => state.user)
-  const [health, setHealth] = useState(null)
   const [analytics, setAnalytics] = useState(null)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const [upcomingMeetings, setUpcomingMeetings] = useState([])
 
   useEffect(() => {
     let active = true
@@ -36,15 +44,25 @@ function DashboardPage() {
       setIsLoading(true)
 
       try {
-        const [healthPayload, analyticsPayload] = await Promise.all([
-          apiRequest('/health'),
-          apiRequest('/api/v1/dashboard/analytics'),
-        ])
+        const analyticsPayload = await apiRequest('/api/v1/dashboard/analytics')
 
         if (active) {
-          setHealth(healthPayload)
           setAnalytics(analyticsPayload)
           setError('')
+        }
+
+        // Sprint 7: Load upcoming meetings for teachers
+        if (user?.role === 'teacher' || user?.role === 'admin') {
+          try {
+            const meetingsPayload = await apiRequest('/api/v1/interactions/upcoming', {
+              showErrorToast: false,
+            })
+            if (active) {
+              setUpcomingMeetings(meetingsPayload?.items ?? [])
+            }
+          } catch {
+            // Non-critical: upcoming meetings widget just won't show data
+          }
         }
       } catch (requestError) {
         if (active) {
@@ -62,7 +80,7 @@ function DashboardPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [user])
 
   const stats = useMemo(() => analytics?.stats ?? [], [analytics])
 
@@ -70,7 +88,7 @@ function DashboardPage() {
     <main className="app-shell">
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">Sprint 5 - Analytics</p>
+          <p className="eyebrow">Sprint 7 — Mentorship & Analytics</p>
           <h1>Institution command center.</h1>
           <p className="lead">
             Welcome back, {user?.name ?? 'EduTrack user'}. This dashboard now pulls
@@ -98,6 +116,36 @@ function DashboardPage() {
               </Card>
             ))}
           </section>
+
+          {/* Sprint 7: Upcoming meetings widget for teachers */}
+          {(user?.role === 'teacher' || user?.role === 'admin') && upcomingMeetings.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Upcoming Meetings</CardTitle>
+                <CardDescription>Your next scheduled mentorship meetings.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="dashboard-list">
+                  {upcomingMeetings.map((meeting) => (
+                    <div key={meeting.interaction_id} className="dashboard-list-item">
+                      <div>
+                        <strong>{meeting.student_name ?? 'Student'}</strong>
+                        <p>{meeting.student_code ?? '—'}</p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span className="profile-pill">
+                          {MEETING_TYPE_LABELS[meeting.last_type] ?? meeting.last_type}
+                        </span>
+                        <p style={{ marginTop: '6px', fontWeight: 600, color: 'var(--text-strong)' }}>
+                          {formatDate(meeting.next_meeting_date)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <section className="dashboard-chart-grid">
             <Card>
@@ -204,33 +252,6 @@ function DashboardPage() {
               </CardContent>
             </Card>
           </section>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Deployment Readiness</CardTitle>
-              <CardDescription>Aligned with the zero-cost stack in `deployment.md`.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <dl className="status-grid">
-                <div>
-                  <dt>Frontend</dt>
-                  <dd>Vercel + `VITE_API_URL`</dd>
-                </div>
-                <div>
-                  <dt>Backend</dt>
-                  <dd>Render + `uvicorn main:app`</dd>
-                </div>
-                <div>
-                  <dt>Database</dt>
-                  <dd>{health?.database ?? 'edutrack'} on MongoDB Atlas</dd>
-                </div>
-                <div>
-                  <dt>CORS</dt>
-                  <dd>Uses `CORS_ORIGINS` env configuration</dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
         </>
       )}
     </main>
@@ -238,3 +259,4 @@ function DashboardPage() {
 }
 
 export default DashboardPage
+
