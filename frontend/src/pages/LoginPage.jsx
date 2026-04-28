@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/button.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.jsx'
 import { Input } from '../components/ui/input.jsx'
@@ -15,7 +15,6 @@ const DEMO_USERS = [
 
 function LoginPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const login = useAuthStore((state) => state.login)
   const error = useAuthStore((state) => state.error)
   const isLoading = useAuthStore((state) => state.isLoading)
@@ -23,8 +22,6 @@ function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-
-  const redirectTo = location.state?.from?.pathname ?? '/dashboard'
 
   const handleDemoFill = (demoUser) => {
     setEmail(demoUser.email)
@@ -36,11 +33,7 @@ function LoginPage() {
 
     try {
       const user = await login(email, password)
-      const safeRedirect =
-        user.role === 'student' && redirectTo === '/dashboard'
-          ? getHomePath(user)
-          : redirectTo
-      navigate(safeRedirect, { replace: true })
+      navigate(getHomePath(user), { replace: true })
     } catch {
       return
     }
